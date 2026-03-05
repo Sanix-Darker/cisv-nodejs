@@ -8,5 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t cisv-node-bench -f bindings/nodejs/benchmarks/Dockerfile .
-      - run: docker run --rm --platform linux/amd64 --cpus=2 --memory=4g cisv-node-bench
+      - name: Build benchmark image
+        run: docker build -t cisv-node-bench -f bindings/nodejs/benchmarks/Dockerfile .
+      - name: Run benchmark
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/amd64 --cpus=2 --memory=4g cisv-node-bench --rows=200000 --iterations=1 --fast | tee bench.out
+          grep -q "cisv-iterator" bench.out
