@@ -28,7 +28,7 @@ npm install cisv
 ```bash
 git clone --recurse-submodules https://github.com/Sanix-Darker/cisv-nodejs
 cd cisv-nodejs
-make -C core all
+make -C core/core all
 cd bindings/nodejs
 npm ci
 npm run build
