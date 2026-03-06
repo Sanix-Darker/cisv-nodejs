@@ -1,4 +1,4 @@
-const { cisvParser } = require('../bindings/nodejs/cisv');
+const { cisvParser } = require('../cisv/cisv');
 
 const parser = new cisvParser({ delimiter: ',' });
 parser.openIterator(__dirname + '/sample.csv');

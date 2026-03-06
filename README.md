@@ -29,7 +29,7 @@ npm install cisv
 git clone --recurse-submodules https://github.com/Sanix-Darker/cisv-nodejs
 cd cisv-nodejs
 make -C core/core all
-cd bindings/nodejs
+cd cisv
 npm ci
 npm run build
 ```
@@ -119,14 +119,14 @@ Runnable examples are available in [`examples/`](./examples):
 ## Testing
 
 ```bash
-cd bindings/nodejs
+cd cisv
 npm test
 ```
 
 ## Benchmarks
 
 ```bash
-docker build -t cisv-node-bench -f bindings/nodejs/benchmarks/Dockerfile .
+docker build -t cisv-node-bench -f cisv/benchmarks/Dockerfile .
 docker run --rm --platform linux/amd64 --cpus=2 --memory=4g cisv-node-bench
 ```
 

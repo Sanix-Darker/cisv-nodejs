@@ -14,7 +14,7 @@ jobs:
       - name: Update cisv-core submodule to latest main
         run: git submodule update --init --remote --recursive
       - name: Build benchmark image
-        run: docker build -t cisv-node-bench -f bindings/nodejs/benchmarks/Dockerfile .
+        run: docker build -t cisv-node-bench -f cisv/benchmarks/Dockerfile .
       - name: Run benchmark
         run: |
           set -euo pipefail

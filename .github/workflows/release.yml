@@ -44,12 +44,12 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="$(cat VERSION)"
-          cd bindings/nodejs
+          cd cisv
           npm version "$VERSION" --no-git-tag-version --allow-same-version
       - name: Build and publish
         run: |
           make -C core/core all
-          cd bindings/nodejs
+          cd cisv
           npm ci
           npm run build
           npm publish --access public

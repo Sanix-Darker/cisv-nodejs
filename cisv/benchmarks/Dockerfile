@@ -14,12 +14,12 @@ WORKDIR /benchmark/cisv
 RUN make clean || true && make core
 
 # Build Node.js binding and install benchmark deps
-WORKDIR /benchmark/cisv/bindings/nodejs
+WORKDIR /benchmark/cisv/cisv
 RUN npm install
 RUN npm run build
 RUN npm install --no-save papaparse csv-parse fast-csv d3-dsv udsv neat-csv
 
 # Run benchmark from the benchmarks directory
-WORKDIR /benchmark/cisv/bindings/nodejs/benchmarks
+WORKDIR /benchmark/cisv/cisv/benchmarks
 ENTRYPOINT ["node", "benchmark.js"]
 CMD ["--rows=100000", "--cols=5", "--iterations=5"]

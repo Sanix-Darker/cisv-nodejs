@@ -11,7 +11,7 @@ npm install cisv
 From source in this repository:
 
 ```bash
-cd bindings/nodejs
+cd cisv
 npm ci
 npm run build
 npm test

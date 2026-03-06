@@ -18,7 +18,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="$(cat VERSION)"
-          PKG_VERSION="$(jq -r '.version' bindings/nodejs/package.json)"
+          PKG_VERSION="$(jq -r '.version' cisv/package.json)"
           [ "$VERSION" = "$PKG_VERSION" ] || {
             echo "Version mismatch: VERSION=$VERSION package.json=$PKG_VERSION"
             exit 1
@@ -39,7 +39,7 @@ jobs:
           node-version: '22.x'
       - run: make -C core/core all
       - run: |
-          cd bindings/nodejs
+          cd cisv
           npm ci
           npm run build
           npm test

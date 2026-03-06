@@ -16,7 +16,7 @@ Docker benchmark for the Node.js binding against common JS CSV parsers.
 ## Build
 
 ```bash
-docker build -t cisv-node-bench -f bindings/nodejs/benchmarks/Dockerfile .
+docker build -t cisv-node-bench -f cisv/benchmarks/Dockerfile .
 ```
 
 ## Run
