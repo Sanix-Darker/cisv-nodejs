@@ -48,7 +48,19 @@ jobs:
           VERSION="$(cat VERSION)"
           cd cisv
           npm version "$VERSION" --no-git-tag-version --allow-same-version
+      - name: Check if version already exists on npm
+        id: npm_exists
+        run: |
+          set -euo pipefail
+          VERSION="$(cat VERSION)"
+          if npm view "cisv@${VERSION}" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "cisv@${VERSION} already exists on npm, skipping publish."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build and publish
+        if: steps.npm_exists.outputs.exists != 'true'
         run: |
           make -C core/core all
           cd cisv
