@@ -5,8 +5,23 @@ on:
   pull_request:
 
 jobs:
+  version-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify VERSION matches package.json
+        run: |
+          set -euo pipefail
+          VERSION="$(cat VERSION)"
+          PKG_VERSION="$(jq -r '.version' bindings/nodejs/package.json)"
+          [ "$VERSION" = "$PKG_VERSION" ] || {
+            echo "Version mismatch: VERSION=$VERSION package.json=$PKG_VERSION"
+            exit 1
+          }
+
   nodejs:
     runs-on: ubuntu-latest
+    needs: version-sync
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
