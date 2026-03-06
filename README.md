@@ -1,14 +1,16 @@
 # cisv-nodejs
+
 ![Node.js Install](./assets/nodejs-install.png)
+
 [![CI](https://github.com/Sanix-Darker/cisv-nodejs/actions/workflows/ci.yml/badge.svg)](https://github.com/Sanix-Darker/cisv-nodejs/actions/workflows/ci.yml)
+
 [![npm version](https://img.shields.io/npm/v/cisv.svg)](https://www.npmjs.com/package/cisv)
-[npm Package](https://www.npmjs.com/package/cisv)
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 Node.js binding distribution for CISV with a native Node-API addon backed by `cisv-core`.
 
-## Features
+## FEATURES
 
 - Native parser with SIMD-accelerated core
 - Sync and async parsing APIs
@@ -16,15 +18,15 @@ Node.js binding distribution for CISV with a native Node-API addon backed by `ci
 - Iterator API for low-memory large-file processing
 - Transform pipeline (C transforms + JavaScript transforms)
 
-## Installation
+## INSTALLATION
 
-### From npm
+### FROM NPM
 
 ```bash
 npm install cisv
 ```
 
-### From source
+### FROM SOURCE
 
 ```bash
 git clone --recurse-submodules https://github.com/Sanix-Darker/cisv-nodejs
@@ -35,7 +37,7 @@ npm ci
 npm run build
 ```
 
-## Core Dependency (Submodule)
+## CORE DEPENDENCY (SUBMODULE)
 
 This repository tracks `cisv-core` via the `./core` git submodule.
 
@@ -47,7 +49,7 @@ git submodule update --init --remote --recursive
 
 CI and release workflows also run this update command, so new `cisv-core` releases are pulled automatically during builds.
 
-## Quick Start
+## QUICK START
 
 ```javascript
 const { cisvParser } = require("cisv");
@@ -57,9 +59,9 @@ const rows = parser.parseSync("data.csv");
 console.log(rows[0]);
 ```
 
-## API Examples
+## API EXAMPLES
 
-### Async parse
+### ASYNC PARSE
 
 ```javascript
 const { cisvParser } = require("cisv");
@@ -71,7 +73,7 @@ const { cisvParser } = require("cisv");
 })();
 ```
 
-### Parse from string
+### PARSE FROM STRING
 
 ```javascript
 const { cisvParser } = require("cisv");
@@ -80,7 +82,7 @@ const parser = new cisvParser();
 const rows = parser.parseString("id,name\n1,alice\n2,bob");
 ```
 
-### Iterator mode (large files)
+### ITERATOR MODE (LARGE FILES)
 
 ```javascript
 const { cisvParser } = require("cisv");
@@ -96,7 +98,7 @@ while ((row = parser.fetchRow()) !== null) {
 parser.closeIterator();
 ```
 
-### Transform by header name
+### TRANSFORM BY HEADER NAME
 
 ```javascript
 const { cisvParser } = require("cisv");
@@ -109,7 +111,7 @@ const rows = parser.parseString("id,name,email\n1,john,john@example.com");
 console.log(rows[1][1]); // JOHN
 ```
 
-## Examples Directory
+## EXAMPLES DIRECTORY
 
 Runnable examples are available in [`examples/`](./examples):
 
@@ -117,22 +119,22 @@ Runnable examples are available in [`examples/`](./examples):
 - `iterator.js`
 - `sample.csv`
 
-## Testing
+## TESTING
 
 ```bash
 cd cisv
 npm test
 ```
 
-## Benchmarks
+## BENCHMARKS
+
+The benchmark output includes both full parse and iterator paths (including `cisv-iterator`).
 
 ```bash
 docker build -t cisv-node-bench -f cisv/benchmarks/Dockerfile .
 docker run --rm --platform linux/amd64 --cpus=2 --memory=4g cisv-node-bench
 ```
 
-The benchmark output includes both full parse and iterator paths (including `cisv-iterator`).
-
-## Upstream Core
+## UPSTREAM CORE
 
 - cisv-core: https://github.com/Sanix-Darker/cisv-core
