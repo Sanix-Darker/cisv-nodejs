@@ -4,13 +4,13 @@
       "target_name": "cisv",
       "sources": [
         "cisv/cisv_addon.cc",
-        "../../core/core/src/parser.c",
-        "../../core/core/src/writer.c",
-        "../../core/core/src/transformer.c"
+        "../core/core/src/parser.c",
+        "../core/core/src/writer.c",
+        "../core/core/src/transformer.c"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
-        "../../core/core/include/",
+        "../core/core/include/",
         "cisv/"
       ],
       "dependencies": [
