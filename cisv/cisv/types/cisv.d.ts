@@ -65,11 +65,27 @@ declare module 'cisv' {
     parseSync(path: string): string[][];
 
     /**
+     * Parse CSV file synchronously using multiple worker threads.
+     * @param path Path to CSV file
+     * @param numThreads Number of threads to use (0 = auto-detect)
+     * @returns Array of rows with string values
+     */
+    parseSyncParallel(path: string, numThreads?: number): string[][];
+
+    /**
      * Parse CSV file asynchronously
      * @param path Path to CSV file
      * @returns Promise resolving to array of rows
      */
     parse(path: string): Promise<string[][]>;
+
+    /**
+     * Parse CSV file asynchronously using multiple worker threads.
+     * @param path Path to CSV file
+     * @param numThreads Number of threads to use (0 = auto-detect)
+     * @returns Promise resolving to array of rows
+     */
+    parseParallel(path: string, numThreads?: number): Promise<string[][]>;
 
     /**
      * Parse CSV string content

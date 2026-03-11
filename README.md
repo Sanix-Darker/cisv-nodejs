@@ -14,6 +14,7 @@ Node.js binding distribution for CISV with a native Node-API addon backed by `ci
 
 - Native parser with SIMD-accelerated core
 - Sync and async parsing APIs
+- Parallel parse mode for large files
 - Streaming and chunked input support
 - Iterator API for low-memory large-file processing
 - Transform pipeline (C transforms + JavaScript transforms)
@@ -71,6 +72,15 @@ const { cisvParser } = require("cisv");
   const rows = await parser.parse("data.csv");
   console.log(rows.length);
 })();
+```
+
+### PARALLEL PARSE
+
+```javascript
+const { cisvParser } = require("cisv");
+
+const parser = new cisvParser();
+const rows = parser.parseSyncParallel("large.csv", 4);
 ```
 
 ### PARSE FROM STRING

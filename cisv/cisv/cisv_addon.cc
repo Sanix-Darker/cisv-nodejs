@@ -10,6 +10,42 @@
 
 namespace {
 
+static bool isInvalidConfigChar(char c) {
+    return c == '\0' || c == '\n' || c == '\r';
+}
+
+static void ValidateSingleCharOption(
+    Napi::Env env,
+    const Napi::Object &options,
+    const char *option_name,
+    char *target,
+    bool allow_null = false
+) {
+    if (!options.Has(option_name)) {
+        return;
+    }
+
+    Napi::Value value = options.Get(option_name);
+    if (allow_null && (value.IsNull() || value.IsUndefined())) {
+        *target = 0;
+        return;
+    }
+
+    if (!value.IsString()) {
+        throw Napi::TypeError::New(env, std::string(option_name) + " must be a string");
+    }
+
+    std::string raw = value.As<Napi::String>();
+    if (raw.size() != 1) {
+        throw Napi::TypeError::New(env, std::string(option_name) + " must be exactly 1 character");
+    }
+    if (isInvalidConfigChar(raw[0])) {
+        throw Napi::TypeError::New(env, std::string("Invalid ") + option_name + " character");
+    }
+
+    *target = raw[0];
+}
+
 // =============================================================================
 // SECURITY: UTF-8 validation to prevent V8 crashes on invalid input
 // Invalid UTF-8 data can cause Napi::String::New to throw or crash
@@ -339,6 +375,69 @@ static void error_cb(void *user, int line, const char *msg) {
     fprintf(stderr, "CSV Parse Error at line %d: %s\n", line, msg);
 }
 
+static bool validateNumThreads(int num_threads, std::string &error) {
+    if (num_threads < 0) {
+        error = "numThreads must be >= 0";
+        return false;
+    }
+    return true;
+}
+
+static bool collectParallelRows(
+    cisv_result_t **results,
+    int result_count,
+    std::vector<std::vector<std::string>> &rows,
+    std::string &error
+) {
+    size_t total_rows = 0;
+    for (int chunk = 0; chunk < result_count; chunk++) {
+        cisv_result_t *result = results[chunk];
+        if (!result) {
+            continue;
+        }
+        if (result->error_code != 0) {
+            error = result->error_message[0] ? result->error_message : "parse error";
+            return false;
+        }
+        total_rows += result->row_count;
+    }
+
+    rows.clear();
+    rows.reserve(total_rows);
+
+    for (int chunk = 0; chunk < result_count; chunk++) {
+        cisv_result_t *result = results[chunk];
+        if (!result) {
+            continue;
+        }
+
+        for (size_t i = 0; i < result->row_count; i++) {
+            cisv_row_t *row = &result->rows[i];
+            std::vector<std::string> out_row;
+            out_row.reserve(row->field_count);
+            for (size_t j = 0; j < row->field_count; j++) {
+                out_row.emplace_back(row->fields[j], row->field_lengths[j]);
+            }
+            rows.emplace_back(std::move(out_row));
+        }
+    }
+
+    return true;
+}
+
+static Napi::Array rowsToJsArray(Napi::Env env, const std::vector<std::vector<std::string>> &rows) {
+    Napi::Array out = Napi::Array::New(env, rows.size());
+    for (size_t i = 0; i < rows.size(); i++) {
+        Napi::Array row = Napi::Array::New(env, rows[i].size());
+        for (size_t j = 0; j < rows[i].size(); j++) {
+            const std::string &field = rows[i][j];
+            row[j] = SafeNewString(env, field.c_str(), field.length());
+        }
+        out[i] = row;
+    }
+    return out;
+}
+
 class ParseFileWorker final : public Napi::AsyncWorker {
 public:
     ParseFileWorker(
@@ -383,19 +482,7 @@ public:
     }
 
     void OnOK() override {
-        Napi::Env env = Env();
-        Napi::Array out = Napi::Array::New(env, rows_.size());
-
-        for (size_t i = 0; i < rows_.size(); i++) {
-            Napi::Array row = Napi::Array::New(env, rows_[i].size());
-            for (size_t j = 0; j < rows_[i].size(); j++) {
-                const std::string &field = rows_[i][j];
-                row[j] = SafeNewString(env, field.c_str(), field.length());
-            }
-            out[i] = row;
-        }
-
-        deferred_.Resolve(out);
+        deferred_.Resolve(rowsToJsArray(Env(), rows_));
     }
 
     void OnError(const Napi::Error &e) override {
@@ -409,6 +496,58 @@ private:
     std::vector<std::vector<std::string>> rows_;
 };
 
+class ParseFileParallelWorker final : public Napi::AsyncWorker {
+public:
+    ParseFileParallelWorker(
+        Napi::Env env,
+        std::string path,
+        cisv_config config,
+        int num_threads,
+        Napi::Promise::Deferred deferred
+    ) : Napi::AsyncWorker(env),
+        path_(std::move(path)),
+        config_(config),
+        num_threads_(num_threads),
+        deferred_(deferred) {}
+
+    void Execute() override {
+        if (!validateNumThreads(num_threads_, error_)) {
+            SetError(error_);
+            return;
+        }
+
+        int result_count = 0;
+        cisv_result_t **results = cisv_parse_file_parallel(path_.c_str(), &config_, num_threads_, &result_count);
+        if (!results) {
+            SetError("parse error: " + std::string(strerror(errno)));
+            return;
+        }
+
+        bool ok = collectParallelRows(results, result_count, rows_, error_);
+        cisv_results_free(results, result_count);
+
+        if (!ok) {
+            SetError(error_);
+        }
+    }
+
+    void OnOK() override {
+        deferred_.Resolve(rowsToJsArray(Env(), rows_));
+    }
+
+    void OnError(const Napi::Error &e) override {
+        deferred_.Reject(e.Value());
+    }
+
+private:
+    std::string path_;
+    cisv_config config_;
+    int num_threads_;
+    Napi::Promise::Deferred deferred_;
+    std::vector<std::vector<std::string>> rows_;
+    std::string error_;
+};
+
 } // namespace
 
 class CisvParser : public Napi::ObjectWrap<CisvParser> {
@@ -416,7 +555,9 @@ public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports) {
         Napi::Function func = DefineClass(env, "cisvParser", {
             InstanceMethod("parseSync", &CisvParser::ParseSync),
+            InstanceMethod("parseSyncParallel", &CisvParser::ParseSyncParallel),
             InstanceMethod("parse", &CisvParser::ParseAsync),
+            InstanceMethod("parseParallel", &CisvParser::ParseParallel),
             InstanceMethod("parseString", &CisvParser::ParseString),
             InstanceMethod("write", &CisvParser::Write),
             InstanceMethod("end", &CisvParser::End),
@@ -449,6 +590,7 @@ public:
 
     CisvParser(const Napi::CallbackInfo &info) : Napi::ObjectWrap<CisvParser>(info) {
         rc_ = new RowCollector();
+        parser_ = nullptr;
         parse_time_ = 0;
         total_bytes_ = 0;
         is_destroyed_ = false;
@@ -472,9 +614,6 @@ public:
         config_.row_cb = row_cb;
         config_.error_cb = error_cb;
         config_.user = rc_;
-
-        // Create parser with configuration
-        parser_ = cisv_parser_create_with_config(&config_);
     }
 
     ~CisvParser() {
@@ -483,51 +622,19 @@ public:
 
     // Apply configuration from JavaScript object
     void ApplyConfigFromObject(Napi::Object options) {
+        Napi::Env env = options.Env();
+
         // Delimiter
-        if (options.Has("delimiter")) {
-            Napi::Value delim = options.Get("delimiter");
-            if (delim.IsString()) {
-                std::string delim_str = delim.As<Napi::String>();
-                if (!delim_str.empty()) {
-                    config_.delimiter = delim_str[0];
-                }
-            }
-        }
+        ValidateSingleCharOption(env, options, "delimiter", &config_.delimiter);
 
         // Quote character
-        if (options.Has("quote")) {
-            Napi::Value quote = options.Get("quote");
-            if (quote.IsString()) {
-                std::string quote_str = quote.As<Napi::String>();
-                if (!quote_str.empty()) {
-                    config_.quote = quote_str[0];
-                }
-            }
-        }
+        ValidateSingleCharOption(env, options, "quote", &config_.quote);
 
         // Escape character
-        if (options.Has("escape")) {
-            Napi::Value escape = options.Get("escape");
-            if (escape.IsString()) {
-                std::string escape_str = escape.As<Napi::String>();
-                if (!escape_str.empty()) {
-                    config_.escape = escape_str[0];
-                }
-            } else if (escape.IsNull() || escape.IsUndefined()) {
-                config_.escape = 0; // RFC4180 style
-            }
-        }
+        ValidateSingleCharOption(env, options, "escape", &config_.escape, true);
 
         // Comment character
-        if (options.Has("comment")) {
-            Napi::Value comment = options.Get("comment");
-            if (comment.IsString()) {
-                std::string comment_str = comment.As<Napi::String>();
-                if (!comment_str.empty()) {
-                    config_.comment = comment_str[0];
-                }
-            }
-        }
+        ValidateSingleCharOption(env, options, "comment", &config_.comment, true);
 
         // Boolean options
         if (options.Has("skipEmptyLines")) {
@@ -578,17 +685,12 @@ public:
         Napi::Object options = info[0].As<Napi::Object>();
         ApplyConfigFromObject(options);
 
-        // Recreate parser with new configuration
+        // Recreate the streaming parser only if it has already been instantiated.
         if (parser_) {
             cisv_parser_destroy(parser_);
+            parser_ = nullptr;
+            ensureParser(env);
         }
-
-        config_.field_cb = field_cb;
-        config_.row_cb = row_cb;
-        config_.error_cb = error_cb;
-        config_.user = rc_;
-
-        parser_ = cisv_parser_create_with_config(&config_);
     }
 
     // Get current configuration
@@ -692,6 +794,7 @@ public:
         } else {
             // Set environment for JS transforms
             rc_->env = env;
+            ensureParser(env);
             result = cisv_parser_parse_file(parser_, path.c_str());
             // Clear the environment reference after parsing
             rc_->env = nullptr;
@@ -737,6 +840,7 @@ public:
         } else {
             // Set environment for JS transforms
             rc_->env = env;
+            ensureParser(env);
 
             // Write the string content as chunks
             cisv_parser_write(parser_, (const uint8_t*)content.c_str(), content.length());
@@ -749,6 +853,53 @@ public:
         total_bytes_ = content.length();
 
         return drainRows(env);
+    }
+
+    Napi::Value ParseSyncParallel(const Napi::CallbackInfo &info) {
+        Napi::Env env = info.Env();
+
+        if (is_destroyed_) {
+            throw Napi::Error::New(env, "Parser has been destroyed");
+        }
+
+        if (info.Length() < 1 || !info[0].IsString()) {
+            throw Napi::TypeError::New(env, "Expected file path string");
+        }
+
+        int num_threads = 0;
+        if (info.Length() > 1 && !info[1].IsUndefined() && !info[1].IsNull()) {
+            if (!info[1].IsNumber()) {
+                throw Napi::TypeError::New(env, "numThreads must be a number");
+            }
+            num_threads = info[1].As<Napi::Number>().Int32Value();
+        }
+
+        std::string validation_error;
+        if (!validateNumThreads(num_threads, validation_error)) {
+            throw Napi::TypeError::New(env, validation_error);
+        }
+
+        std::string path = info[0].As<Napi::String>().Utf8Value();
+        int result_count = 0;
+        cisv_result_t **results = cisv_parse_file_parallel(
+            path.c_str(),
+            &config_,
+            num_threads,
+            &result_count);
+        if (!results) {
+            throw Napi::Error::New(env, "parse error: " + std::string(strerror(errno)));
+        }
+
+        std::vector<std::vector<std::string>> rows;
+        std::string error;
+        bool ok = collectParallelRows(results, result_count, rows, error);
+        cisv_results_free(results, result_count);
+
+        if (!ok) {
+            throw Napi::Error::New(env, error);
+        }
+
+        return rowsToJsArray(env, rows);
     }
 
     // Write chunk for streaming
@@ -813,6 +964,7 @@ public:
             stream_buffering_active_ = false;
         }
 
+        ensureParser(env);
         cisv_parser_write(parser_, chunk_data, chunk_size);
         total_bytes_ += chunk_size;
     }
@@ -847,6 +999,7 @@ public:
             stream_buffering_active_ = false;
         }
 
+        ensureParser(info.Env());
         cisv_parser_end(parser_);
         // Clear the environment reference after ending to prevent stale references
         rc_->env = nullptr;
@@ -1306,6 +1459,43 @@ Napi::Value RemoveTransformByName(const Napi::CallbackInfo &info) {
         return deferred.Promise();
     }
 
+    Napi::Value ParseParallel(const Napi::CallbackInfo &info) {
+        Napi::Env env = info.Env();
+
+        if (is_destroyed_) {
+            throw Napi::Error::New(env, "Parser has been destroyed");
+        }
+
+        if (info.Length() < 1 || !info[0].IsString()) {
+            throw Napi::TypeError::New(env, "Expected file path string");
+        }
+
+        int num_threads = 0;
+        if (info.Length() > 1 && !info[1].IsUndefined() && !info[1].IsNull()) {
+            if (!info[1].IsNumber()) {
+                throw Napi::TypeError::New(env, "numThreads must be a number");
+            }
+            num_threads = info[1].As<Napi::Number>().Int32Value();
+        }
+
+        auto deferred = Napi::Promise::Deferred::New(env);
+        cisv_config worker_config = config_;
+        worker_config.field_cb = nullptr;
+        worker_config.row_cb = nullptr;
+        worker_config.error_cb = nullptr;
+        worker_config.user = nullptr;
+
+        auto *worker = new ParseFileParallelWorker(
+            env,
+            info[0].As<Napi::String>().Utf8Value(),
+            worker_config,
+            num_threads,
+            deferred);
+        worker->Queue();
+
+        return deferred.Promise();
+    }
+
     // Get information about registered transforms
     Napi::Value GetTransformInfo(const Napi::CallbackInfo &info) {
         Napi::Env env = info.Env();
@@ -1404,20 +1594,9 @@ Napi::Value RemoveTransformByName(const Napi::CallbackInfo &info) {
             Napi::Object options = info[1].As<Napi::Object>();
 
             // Apply same configuration parsing logic
-            if (options.Has("delimiter")) {
-                std::string delim = options.Get("delimiter").As<Napi::String>();
-                if (!delim.empty()) config.delimiter = delim[0];
-            }
-
-            if (options.Has("quote")) {
-                std::string quote = options.Get("quote").As<Napi::String>();
-                if (!quote.empty()) config.quote = quote[0];
-            }
-
-            if (options.Has("comment")) {
-                std::string comment = options.Get("comment").As<Napi::String>();
-                if (!comment.empty()) config.comment = comment[0];
-            }
+            ValidateSingleCharOption(env, options, "delimiter", &config.delimiter);
+            ValidateSingleCharOption(env, options, "quote", &config.quote);
+            ValidateSingleCharOption(env, options, "comment", &config.comment, true);
 
             if (options.Has("skipEmptyLines")) {
                 config.skip_empty_lines = options.Get("skipEmptyLines").As<Napi::Boolean>();
@@ -1532,6 +1711,22 @@ Napi::Value RemoveTransformByName(const Napi::CallbackInfo &info) {
     }
 
 private:
+    void ensureParser(Napi::Env env) {
+        if (parser_) {
+            return;
+        }
+
+        config_.field_cb = field_cb;
+        config_.row_cb = row_cb;
+        config_.error_cb = error_cb;
+        config_.user = rc_;
+
+        parser_ = cisv_parser_create_with_config(&config_);
+        if (!parser_) {
+            throw Napi::Error::New(env, "Failed to create parser");
+        }
+    }
+
     void clearBatchResult() {
         if (batch_result_) {
             cisv_result_free(batch_result_);
@@ -1559,6 +1754,7 @@ private:
         if (pending_stream_.empty()) {
             return;
         }
+        ensureParser(Env());
         cisv_parser_write(
             parser_,
             reinterpret_cast<const uint8_t*>(pending_stream_.data()),
@@ -1640,7 +1836,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
     CisvParser::Init(env, exports);
 
     // Add version info
-    exports.Set("version", Napi::String::New(env, "1.1.0"));
+    exports.Set("version", Napi::String::New(env, "0.4.7"));
 
     // Add transform type constants
     Napi::Object transformTypes = Napi::Object::New(env);

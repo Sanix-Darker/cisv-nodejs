@@ -372,6 +372,22 @@ describe('CSV Parser Core Functionality', () => {
       assert.deepStrictEqual(rows[0], ['id', 'name', 'email']);
     });
 
+    it('should parse synchronously in parallel mode', () => {
+      const parser = new cisvParser();
+      const rows = parser.parseSyncParallel(testFile, 2);
+
+      assert.strictEqual(rows.length, 4);
+      assert.deepStrictEqual(rows[0], ['id', 'name', 'email']);
+    });
+
+    it('should parse asynchronously in parallel mode', async () => {
+      const parser = new cisvParser();
+      const rows = await parser.parseParallel(testFile, 2);
+
+      assert.strictEqual(rows.length, 4);
+      assert.deepStrictEqual(rows[0], ['id', 'name', 'email']);
+    });
+
     it('should reject promise on error', async () => {
       const parser = new cisvParser();
 
