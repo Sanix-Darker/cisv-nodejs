@@ -1836,7 +1836,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
     CisvParser::Init(env, exports);
 
     // Add version info
-    exports.Set("version", Napi::String::New(env, "0.4.7"));
+    exports.Set("version", Napi::String::New(env, "0.4.8"));
 
     // Add transform type constants
     Napi::Object transformTypes = Napi::Object::New(env);
