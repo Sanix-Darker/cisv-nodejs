@@ -67,29 +67,31 @@ function generateCsv(filepath, rows, cols) {
     console.log(`Generating CSV: ${rows.toLocaleString()} rows × ${cols} columns...`);
     const start = performance.now();
 
-    const lines = [];
+    const fd = fs.openSync(filepath, 'w');
 
-    // Header
-    const header = [];
-    for (let i = 0; i < cols; i++) {
-        header.push(`col${i}`);
-    }
-    lines.push(header.join(','));
-
-    // Data rows
-    for (let row = 0; row < rows; row++) {
-        const rowData = [];
-        for (let col = 0; col < cols; col++) {
-            rowData.push(`value_${row}_${col}`);
+    try {
+        // Header
+        const header = [];
+        for (let i = 0; i < cols; i++) {
+            header.push(`col${i}`);
         }
-        lines.push(rowData.join(','));
+        fs.writeSync(fd, `${header.join(',')}\n`);
 
-        if (row > 0 && row % 500000 === 0) {
-            console.log(`  Generated ${row.toLocaleString()} rows...`);
+        // Data rows
+        for (let row = 0; row < rows; row++) {
+            const rowData = [];
+            for (let col = 0; col < cols; col++) {
+                rowData.push(`value_${row}_${col}`);
+            }
+            fs.writeSync(fd, `${rowData.join(',')}\n`);
+
+            if (row > 0 && row % 500000 === 0) {
+                console.log(`  Generated ${row.toLocaleString()} rows...`);
+            }
         }
+    } finally {
+        fs.closeSync(fd);
     }
-
-    fs.writeFileSync(filepath, lines.join('\n'));
 
     const elapsed = (performance.now() - start) / 1000;
     const size = fs.statSync(filepath).size;
