@@ -4,13 +4,13 @@
       "target_name": "cisv",
       "sources": [
         "cisv/cisv_addon.cc",
-        "../core/core/src/parser.c",
-        "../core/core/src/writer.c",
-        "../core/core/src/transformer.c"
+        "core/core/src/parser.c",
+        "core/core/src/writer.c",
+        "core/core/src/transformer.c"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
-        "../core/core/include/",
+        "core/core/include/",
         "cisv/"
       ],
       "dependencies": [
@@ -21,7 +21,6 @@
       "cflags_cc!": [ "-fno-exceptions" ],
       "cflags_cc": ["-O3"],
       "defines": [
-        "NAPI_DISABLE_CPP_EXCEPTIONS",
         "NAPI_VERSION=6"
       ],
       "conditions": [
@@ -48,6 +47,7 @@
         }],
         ["OS=='mac'", {
           "xcode_settings": {
+            "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
             "GCC_OPTIMIZATION_LEVEL": "3",
             "LLVM_LTO": "YES",
             "OTHER_CFLAGS": [
