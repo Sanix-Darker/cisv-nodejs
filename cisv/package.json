@@ -4,11 +4,12 @@
   "description": "The csv parser on steroids.",
   "author": "sanix<s4nixd@gmail.com>",
   "main": "./build/Release/cisv.node",
-  "types": "./types/cisv.d.ts",
+  "types": "./cisv/types/cisv.d.ts",
   "exports": {
     ".": {
       "import": "./cisv/index.mjs",
-      "require": "./cisv/index.js"
+      "require": "./cisv/index.js",
+      "types": "./cisv/types/cisv.d.ts"
     }
   },
   "files": [
