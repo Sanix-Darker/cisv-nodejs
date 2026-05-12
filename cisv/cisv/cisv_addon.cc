@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <climits>
+#include <cmath>
 
 namespace {
 
@@ -45,6 +46,126 @@ static void ValidateSingleCharOption(
     }
 
     *target = raw[0];
+}
+
+static double MaxJsSafeInteger() {
+    return 9007199254740991.0;
+}
+
+static bool IsWholeNumber(double value) {
+    return std::isfinite(value) && std::floor(value) == value;
+}
+
+static void ApplyBooleanOption(
+    Napi::Env env,
+    const Napi::Object &options,
+    const char *option_name,
+    bool *target
+) {
+    if (!options.Has(option_name)) {
+        return;
+    }
+
+    Napi::Value value = options.Get(option_name);
+    if (!value.IsBoolean()) {
+        throw Napi::TypeError::New(env, std::string(option_name) + " must be a boolean");
+    }
+
+    *target = value.As<Napi::Boolean>();
+}
+
+static void ApplySizeOption(
+    Napi::Env env,
+    const Napi::Object &options,
+    const char *option_name,
+    size_t *target
+) {
+    if (!options.Has(option_name)) {
+        return;
+    }
+
+    Napi::Value value = options.Get(option_name);
+    if (value.IsNull() || value.IsUndefined()) {
+        *target = 0;
+        return;
+    }
+    if (!value.IsNumber()) {
+        throw Napi::TypeError::New(env, std::string(option_name) + " must be a number");
+    }
+
+    double raw = value.As<Napi::Number>().DoubleValue();
+    double max_value = static_cast<double>(SIZE_MAX);
+    if (!IsWholeNumber(raw) || raw < 0.0 || raw > max_value || raw > MaxJsSafeInteger()) {
+        throw Napi::RangeError::New(env, std::string(option_name) + " is out of range");
+    }
+
+    *target = static_cast<size_t>(raw);
+}
+
+static void ApplyLineOption(
+    Napi::Env env,
+    const Napi::Object &options,
+    const char *option_name,
+    int *target
+) {
+    if (!options.Has(option_name)) {
+        return;
+    }
+
+    Napi::Value value = options.Get(option_name);
+    if (value.IsNull() || value.IsUndefined()) {
+        *target = 0;
+        return;
+    }
+    if (!value.IsNumber()) {
+        throw Napi::TypeError::New(env, std::string(option_name) + " must be a number");
+    }
+
+    double raw = value.As<Napi::Number>().DoubleValue();
+    if (!IsWholeNumber(raw) || raw < 0.0 || raw > static_cast<double>(INT_MAX)) {
+        throw Napi::RangeError::New(env, std::string(option_name) + " is out of range");
+    }
+
+    *target = static_cast<int>(raw);
+}
+
+static void ValidateConfigSemantics(Napi::Env env, const cisv_config &config) {
+    if (config.delimiter == config.quote) {
+        throw Napi::TypeError::New(env, "delimiter and quote cannot be the same");
+    }
+    if (config.escape != '\0' && config.escape == config.delimiter) {
+        throw Napi::TypeError::New(env, "escape and delimiter cannot be the same");
+    }
+    if (config.escape != '\0' && config.escape == config.quote) {
+        throw Napi::TypeError::New(env, "escape and quote cannot be the same");
+    }
+    if (config.comment != '\0' &&
+        (config.comment == config.delimiter || config.comment == config.quote || config.comment == config.escape)) {
+        throw Napi::TypeError::New(env, "comment cannot conflict with delimiter, quote, or escape");
+    }
+
+    int effective_from = config.from_line > 0 ? config.from_line : 1;
+    if (config.to_line != 0 && config.to_line < effective_from) {
+        throw Napi::RangeError::New(env, "toLine must be >= fromLine");
+    }
+}
+
+static void ApplyConfigOptions(Napi::Env env, const Napi::Object &options, cisv_config *config) {
+    ValidateSingleCharOption(env, options, "delimiter", &config->delimiter);
+    ValidateSingleCharOption(env, options, "quote", &config->quote);
+    ValidateSingleCharOption(env, options, "escape", &config->escape, true);
+    ValidateSingleCharOption(env, options, "comment", &config->comment, true);
+
+    ApplyBooleanOption(env, options, "skipEmptyLines", &config->skip_empty_lines);
+    ApplyBooleanOption(env, options, "trim", &config->trim);
+    ApplyBooleanOption(env, options, "relaxed", &config->relaxed);
+    ApplyBooleanOption(env, options, "skipLinesWithError", &config->skip_lines_with_error);
+
+    ApplySizeOption(env, options, "maxRowSize", &config->max_row_size);
+    ApplyLineOption(env, options, "fromLine", &config->from_line);
+    ApplyLineOption(env, options, "toLine", &config->to_line);
+
+    ValidateConfigSemantics(env, *config);
 }
 
 // =============================================================================
@@ -590,7 +711,7 @@ public:
     }
 
     CisvParser(const Napi::CallbackInfo &info) : Napi::ObjectWrap<CisvParser>(info) {
-        rc_ = new RowCollector();
+        rc_ = nullptr;
         parser_ = nullptr;
         parse_time_ = 0;
         total_bytes_ = 0;
@@ -610,6 +731,8 @@ public:
             ApplyConfigFromObject(options);
         }
 
+        rc_ = new RowCollector();
+
         // Set callbacks
         config_.field_cb = field_cb;
         config_.row_cb = row_cb;
@@ -624,51 +747,9 @@ public:
     // Apply configuration from JavaScript object
     void ApplyConfigFromObject(Napi::Object options) {
         Napi::Env env = options.Env();
-
-        // Delimiter
-        ValidateSingleCharOption(env, options, "delimiter", &config_.delimiter);
-
-        // Quote character
-        ValidateSingleCharOption(env, options, "quote", &config_.quote);
-
-        // Escape character
-        ValidateSingleCharOption(env, options, "escape", &config_.escape, true);
-
-        // Comment character
-        ValidateSingleCharOption(env, options, "comment", &config_.comment, true);
-
-        // Boolean options
-        if (options.Has("skipEmptyLines")) {
-            config_.skip_empty_lines = options.Get("skipEmptyLines").As<Napi::Boolean>();
-        }
-
-        if (options.Has("trim")) {
-            config_.trim = options.Get("trim").As<Napi::Boolean>();
-        }
-
-        if (options.Has("relaxed")) {
-            config_.relaxed = options.Get("relaxed").As<Napi::Boolean>();
-        }
-
-        if (options.Has("skipLinesWithError")) {
-            config_.skip_lines_with_error = options.Get("skipLinesWithError").As<Napi::Boolean>();
-        }
-
-        // Numeric options
-        if (options.Has("maxRowSize")) {
-            Napi::Value val = options.Get("maxRowSize");
-            if (!val.IsNull() && !val.IsUndefined()) {
-                config_.max_row_size = val.As<Napi::Number>().Uint32Value();
-            }
-        }
-
-        if (options.Has("fromLine")) {
-            config_.from_line = options.Get("fromLine").As<Napi::Number>().Int32Value();
-        }
-
-        if (options.Has("toLine")) {
-            config_.to_line = options.Get("toLine").As<Napi::Number>().Int32Value();
-        }
+        cisv_config next = config_;
+        ApplyConfigOptions(env, options, &next);
+        config_ = next;
     }
 
     // Set configuration after creation
@@ -1593,78 +1674,7 @@ Napi::Value RemoveTransformByName(const Napi::CallbackInfo &info) {
 
         if (info.Length() > 1 && info[1].IsObject()) {
             Napi::Object options = info[1].As<Napi::Object>();
-
-            // Apply same configuration parsing logic
-            ValidateSingleCharOption(env, options, "delimiter", &config.delimiter);
-            ValidateSingleCharOption(env, options, "quote", &config.quote);
-            ValidateSingleCharOption(env, options, "escape", &config.escape, true);
-            ValidateSingleCharOption(env, options, "comment", &config.comment, true);
-
-            if (options.Has("skipEmptyLines")) {
-                if (!options.Get("skipEmptyLines").IsBoolean()) {
-                    throw Napi::TypeError::New(env, "skipEmptyLines must be a boolean");
-                }
-                config.skip_empty_lines = options.Get("skipEmptyLines").As<Napi::Boolean>();
-            }
-
-            if (options.Has("trim")) {
-                if (!options.Get("trim").IsBoolean()) {
-                    throw Napi::TypeError::New(env, "trim must be a boolean");
-                }
-                config.trim = options.Get("trim").As<Napi::Boolean>();
-            }
-
-            if (options.Has("relaxed")) {
-                if (!options.Get("relaxed").IsBoolean()) {
-                    throw Napi::TypeError::New(env, "relaxed must be a boolean");
-                }
-                config.relaxed = options.Get("relaxed").As<Napi::Boolean>();
-            }
-
-            if (options.Has("skipLinesWithError")) {
-                if (!options.Get("skipLinesWithError").IsBoolean()) {
-                    throw Napi::TypeError::New(env, "skipLinesWithError must be a boolean");
-                }
-                config.skip_lines_with_error = options.Get("skipLinesWithError").As<Napi::Boolean>();
-            }
-
-            if (options.Has("maxRowSize")) {
-                Napi::Value val = options.Get("maxRowSize");
-                if (!val.IsNull() && !val.IsUndefined()) {
-                    if (!val.IsNumber()) {
-                        throw Napi::TypeError::New(env, "maxRowSize must be a number");
-                    }
-                    double raw = val.As<Napi::Number>().DoubleValue();
-                    if (!(raw >= 0.0) || raw > static_cast<double>(SIZE_MAX)) {
-                        throw Napi::RangeError::New(env, "maxRowSize is out of range");
-                    }
-                    config.max_row_size = static_cast<size_t>(raw);
-                }
-            }
-
-            if (options.Has("fromLine")) {
-                Napi::Value val = options.Get("fromLine");
-                if (!val.IsNumber()) {
-                    throw Napi::TypeError::New(env, "fromLine must be a number");
-                }
-                double raw = val.As<Napi::Number>().DoubleValue();
-                if (!(raw >= 0.0) || raw > static_cast<double>(INT_MAX)) {
-                    throw Napi::RangeError::New(env, "fromLine is out of range");
-                }
-                config.from_line = static_cast<int>(raw);
-            }
-
-            if (options.Has("toLine")) {
-                Napi::Value val = options.Get("toLine");
-                if (!val.IsNumber()) {
-                    throw Napi::TypeError::New(env, "toLine must be a number");
-                }
-                double raw = val.As<Napi::Number>().DoubleValue();
-                if (!(raw >= 0.0) || raw > static_cast<double>(INT_MAX)) {
-                    throw Napi::RangeError::New(env, "toLine is out of range");
-                }
-                config.to_line = static_cast<int>(raw);
-            }
+            ApplyConfigOptions(env, options, &config);
         }
 
         size_t count = cisv_parser_count_rows_with_config(path.c_str(), &config);

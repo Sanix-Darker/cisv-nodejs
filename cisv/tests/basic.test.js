@@ -119,36 +119,62 @@ describe('CSV Parser Core Functionality', () => {
       assert.deepStrictEqual(rows[2], ['Jane', '25']);
     });
 
-    // FIXME
-    //it('should skip empty lines when configured', () => {
-    //  const parser = new cisvParser({ skipEmptyLines: true });
-    //  const csvWithEmpty = 'a,b\n1,2\n\n3,4\n\n';
-    //  const rows = parser.parseString(csvWithEmpty);
+    it('should skip physically empty lines without dropping empty-field rows', () => {
+      const parser = new cisvParser({ skipEmptyLines: true });
+      const csvWithEmpty = 'a,b,c\n\n,,\n1,2,3\n';
+      const rows = parser.parseString(csvWithEmpty);
 
-    //  assert.strictEqual(rows.length, 3, 'Should skip empty lines');
-    //  assert.deepStrictEqual(rows[2], ['3', '4']);
-    //});
+      assert.strictEqual(rows.length, 3, 'Should skip only the blank physical line');
+      assert.deepStrictEqual(rows[1], ['', '', '']);
+      assert.deepStrictEqual(rows[2], ['1', '2', '3']);
+    });
 
-    // FIXME
-    //it('should handle line range selection', () => {
-    //  const parser = new cisvParser({ fromLine: 2, toLine: 3 });
-    //  const rows = parser.parseSync(testFile);
+    it('should handle line range selection', () => {
+      const parser = new cisvParser({ fromLine: 2, toLine: 3 });
+      const rows = parser.parseSync(testFile);
 
-    //  // fromLine and toLine are 1-based and apply to all lines including header
-    //  assert.strictEqual(rows.length, 2, 'Should only parse lines 2-3');
-    //  assert.deepStrictEqual(rows[0], ['1', 'John', 'john@test.com']);
-    //  assert.deepStrictEqual(rows[1], ['2', 'Jane Doe', 'jane@test.com']);
-    //});
+      // fromLine and toLine are 1-based and apply to all lines including header
+      assert.strictEqual(rows.length, 2, 'Should only parse lines 2-3');
+      assert.deepStrictEqual(rows[0], ['1', 'John', 'john@test.com']);
+      assert.deepStrictEqual(rows[1], ['2', 'Jane Doe', 'jane@test.com']);
 
-    // FIXME
-    //it('should handle comment lines', () => {
-    //  const parser = new cisvParser({ comment: '#' });
-    //  const csvWithComments = '# This is a comment\nname,age\n# Another comment\nJohn,30\nJane,25';
-    //  const rows = parser.parseString(csvWithComments);
+      const stringRows = parser.parseString('h1,h2\ns1,s2\ns3,s4\ns5,s6');
+      assert.deepStrictEqual(stringRows, [['s1', 's2'], ['s3', 's4']]);
+    });
 
-    //  assert.strictEqual(rows.length, 3, 'Should skip comment lines');
-    //  assert.deepStrictEqual(rows[0], ['name', 'age']);
-    //});
+    it('should handle comment lines', () => {
+      const parser = new cisvParser({ comment: '#', trim: true });
+      const csvWithComments = '  # This is a comment\nname,age\n# Another comment\nJohn,30\nJane,25';
+      const rows = parser.parseString(csvWithComments);
+
+      assert.strictEqual(rows.length, 3, 'Should skip comment lines');
+      assert.deepStrictEqual(rows[0], ['name', 'age']);
+      assert.deepStrictEqual(rows[2], ['Jane', '25']);
+    });
+
+    it('should handle custom escape in parse paths', () => {
+      const parser = new cisvParser({ escape: '\\' });
+      const rows = parser.parseString('id,msg\n1,"hello \\"quoted\\" value"');
+
+      assert.deepStrictEqual(rows[1], ['1', 'hello "quoted" value']);
+    });
+
+    it('should preserve size_t-sized maxRowSize values', () => {
+      const largeLimit = 2 ** 40;
+      const parser = new cisvParser({ maxRowSize: largeLimit });
+
+      assert.strictEqual(parser.getConfig().maxRowSize, largeLimit);
+    });
+
+    it('should validate parser config types, ranges, and conflicts', () => {
+      assert.throws(() => new cisvParser({ maxRowSize: -1 }), /maxRowSize is out of range/);
+      assert.throws(() => new cisvParser({ maxRowSize: 1.5 }), /maxRowSize is out of range/);
+      assert.throws(() => new cisvParser({ fromLine: 3, toLine: 2 }), /toLine must be >= fromLine/);
+      assert.throws(() => new cisvParser({ delimiter: '"' }), /delimiter and quote cannot be the same/);
+      assert.throws(() => new cisvParser({ escape: ',' }), /escape and delimiter cannot be the same/);
+      assert.throws(() => new cisvParser({ comment: ',' }), /comment cannot conflict/);
+      assert.throws(() => new cisvParser({ trim: 'yes' }), /trim must be a boolean/);
+    });
 
     it('should dynamically change configuration', () => {
       const parser = new cisvParser();
@@ -355,6 +381,11 @@ describe('CSV Parser Core Functionality', () => {
       assert.strictEqual(count, 2);
     });
 
+    it('should count quoted multiline rows', () => {
+      const count = cisvParser.countRowsWithConfig(quotedFile, {});
+      assert.strictEqual(count, 4);
+    });
+
     it('should validate count config options', () => {
       assert.throws(
         () => cisvParser.countRowsWithConfig(testFile, { escape: 'xx' }),
@@ -367,6 +398,18 @@ describe('CSV Parser Core Functionality', () => {
       assert.throws(
         () => cisvParser.countRowsWithConfig(testFile, { skipEmptyLines: 'yes' }),
         /skipEmptyLines must be a boolean/
+      );
+      assert.throws(
+        () => cisvParser.countRowsWithConfig(testFile, { maxRowSize: 1.5 }),
+        /maxRowSize is out of range/
+      );
+      assert.throws(
+        () => cisvParser.countRowsWithConfig(testFile, { delimiter: '"' }),
+        /delimiter and quote cannot be the same/
+      );
+      assert.throws(
+        () => cisvParser.countRowsWithConfig(testFile, { fromLine: 3, toLine: 2 }),
+        /toLine must be >= fromLine/
       );
     });
   });
