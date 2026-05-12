@@ -23,6 +23,8 @@ describe('CSV Parser Core Functionality', () => {
   const iteratorConfigFile = path.join(testDir, 'iterator-config.csv');
   const iteratorEmptyFile = path.join(testDir, 'iterator-empty.csv');
   const iteratorLimitFile = path.join(testDir, 'iterator-limit.csv');
+  const iteratorBadAfterQuoteFile = path.join(testDir, 'iterator-bad-after-quote.csv');
+  const iteratorBadUnterminatedFile = path.join(testDir, 'iterator-bad-unterminated.csv');
 
   before(() => {
     if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
@@ -67,6 +69,8 @@ describe('CSV Parser Core Functionality', () => {
       ',,\n');
 
     fs.writeFileSync(iteratorLimitFile, 'a,b\n123456789,2\n');
+    fs.writeFileSync(iteratorBadAfterQuoteFile, '"a"x,b\n');
+    fs.writeFileSync(iteratorBadUnterminatedFile, '"unterminated\n');
 
     // Generate large test file (1000 rows)
     let largeContent = 'id,value\n';
@@ -86,7 +90,9 @@ describe('CSV Parser Core Functionality', () => {
       escapedCountFile,
       iteratorConfigFile,
       iteratorEmptyFile,
-      iteratorLimitFile
+      iteratorLimitFile,
+      iteratorBadAfterQuoteFile,
+      iteratorBadUnterminatedFile
     ].forEach(file => {
       if (fs.existsSync(file)) fs.unlinkSync(file);
     });
@@ -556,6 +562,24 @@ describe('CSV Parser Core Functionality', () => {
       const parser = new cisvParser({ maxRowSize: 8 });
       parser.openIterator(iteratorLimitFile);
 
+      try {
+        assert.throws(() => fetchAllRows(parser), /Error reading CSV row/);
+      } finally {
+        parser.closeIterator();
+      }
+    });
+
+    it('should reject malformed quoted fields during iteration', () => {
+      const parser = new cisvParser();
+
+      parser.openIterator(iteratorBadAfterQuoteFile);
+      try {
+        assert.throws(() => fetchAllRows(parser), /Error reading CSV row/);
+      } finally {
+        parser.closeIterator();
+      }
+
+      parser.openIterator(iteratorBadUnterminatedFile);
       try {
         assert.throws(() => fetchAllRows(parser), /Error reading CSV row/);
       } finally {
