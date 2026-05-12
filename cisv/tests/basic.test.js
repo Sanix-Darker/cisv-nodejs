@@ -25,6 +25,7 @@ describe('CSV Parser Core Functionality', () => {
   const iteratorLimitFile = path.join(testDir, 'iterator-limit.csv');
   const iteratorBadAfterQuoteFile = path.join(testDir, 'iterator-bad-after-quote.csv');
   const iteratorBadUnterminatedFile = path.join(testDir, 'iterator-bad-unterminated.csv');
+  const crOnlyFile = path.join(testDir, 'cr-only.csv');
 
   before(() => {
     if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
@@ -71,6 +72,7 @@ describe('CSV Parser Core Functionality', () => {
     fs.writeFileSync(iteratorLimitFile, 'a,b\n123456789,2\n');
     fs.writeFileSync(iteratorBadAfterQuoteFile, '"a"x,b\n');
     fs.writeFileSync(iteratorBadUnterminatedFile, '"unterminated\n');
+    fs.writeFileSync(crOnlyFile, 'a,b\r"line1\rline2",c\r');
 
     // Generate large test file (1000 rows)
     let largeContent = 'id,value\n';
@@ -92,7 +94,8 @@ describe('CSV Parser Core Functionality', () => {
       iteratorEmptyFile,
       iteratorLimitFile,
       iteratorBadAfterQuoteFile,
-      iteratorBadUnterminatedFile
+      iteratorBadUnterminatedFile,
+      crOnlyFile
     ].forEach(file => {
       if (fs.existsSync(file)) fs.unlinkSync(file);
     });
@@ -493,6 +496,11 @@ describe('CSV Parser Core Functionality', () => {
       assert.strictEqual(count, 4);
     });
 
+    it('should count CR-only line endings', () => {
+      const count = cisvParser.countRows(crOnlyFile);
+      assert.strictEqual(count, 2);
+    });
+
     it('should validate count config options', () => {
       assert.throws(
         () => cisvParser.countRowsWithConfig(testFile, { escape: 'xx' }),
@@ -735,6 +743,16 @@ describe('Advanced CSV Features', () => {
 
       assert.strictEqual(rows.length, 3);
       assert.deepStrictEqual(rows[1], ['1', '2']);
+    });
+
+    it('should handle CR-only line endings', () => {
+      const parser = new cisvParser();
+      const rows = parser.parseString('a,b\r"line1\rline2",c\r');
+
+      assert.deepStrictEqual(rows, [
+        ['a', 'b'],
+        ['line1\rline2', 'c']
+      ]);
     });
 
     it('should handle BOM (Byte Order Mark)', () => {
