@@ -25,6 +25,7 @@ describe('CSV Parser Core Functionality', () => {
   const iteratorLimitFile = path.join(testDir, 'iterator-limit.csv');
   const iteratorBadAfterQuoteFile = path.join(testDir, 'iterator-bad-after-quote.csv');
   const iteratorBadUnterminatedFile = path.join(testDir, 'iterator-bad-unterminated.csv');
+  const bareQuoteFile = path.join(testDir, 'bare-quote.csv');
   const crOnlyFile = path.join(testDir, 'cr-only.csv');
 
   before(() => {
@@ -72,6 +73,7 @@ describe('CSV Parser Core Functionality', () => {
     fs.writeFileSync(iteratorLimitFile, 'a,b\n123456789,2\n');
     fs.writeFileSync(iteratorBadAfterQuoteFile, '"a"x,b\n');
     fs.writeFileSync(iteratorBadUnterminatedFile, '"unterminated\n');
+    fs.writeFileSync(bareQuoteFile, 'a"b,c\n');
     fs.writeFileSync(crOnlyFile, 'a,b\r"line1\rline2",c\r');
 
     // Generate large test file (1000 rows)
@@ -95,6 +97,7 @@ describe('CSV Parser Core Functionality', () => {
       iteratorLimitFile,
       iteratorBadAfterQuoteFile,
       iteratorBadUnterminatedFile,
+      bareQuoteFile,
       crOnlyFile
     ].forEach(file => {
       if (fs.existsSync(file)) fs.unlinkSync(file);
@@ -203,6 +206,14 @@ describe('CSV Parser Core Functionality', () => {
       const rows = parser.parseString('id,msg\n1,"hello \\"quoted\\" value"');
 
       assert.deepStrictEqual(rows[1], ['1', 'hello "quoted" value']);
+    });
+
+    it('should reject bare quotes by default and allow relaxed parsing', () => {
+      const parser = new cisvParser();
+      assert.throws(() => parser.parseString('a"b,c\n'), /Parse error/);
+
+      const relaxed = new cisvParser({ relaxed: true });
+      assert.deepStrictEqual(relaxed.parseString('a"b,c\n'), [['a"b', 'c']]);
     });
 
     it('should preserve size_t-sized maxRowSize values', () => {
@@ -501,6 +512,11 @@ describe('CSV Parser Core Functionality', () => {
       assert.strictEqual(count, 2);
     });
 
+    it('should count relaxed bare quotes and reject strict bare quote counts', () => {
+      assert.strictEqual(cisvParser.countRows(bareQuoteFile), 0);
+      assert.strictEqual(cisvParser.countRowsWithConfig(bareQuoteFile, { relaxed: true }), 1);
+    });
+
     it('should validate count config options', () => {
       assert.throws(
         () => cisvParser.countRowsWithConfig(testFile, { escape: 'xx' }),
@@ -592,6 +608,24 @@ describe('CSV Parser Core Functionality', () => {
         assert.throws(() => fetchAllRows(parser), /Error reading CSV row/);
       } finally {
         parser.closeIterator();
+      }
+    });
+
+    it('should reject bare quotes by default and allow relaxed iteration', () => {
+      const parser = new cisvParser();
+      parser.openIterator(bareQuoteFile);
+      try {
+        assert.throws(() => fetchAllRows(parser), /Error reading CSV row/);
+      } finally {
+        parser.closeIterator();
+      }
+
+      const relaxed = new cisvParser({ relaxed: true });
+      relaxed.openIterator(bareQuoteFile);
+      try {
+        assert.deepStrictEqual(fetchAllRows(relaxed), [['a"b', 'c']]);
+      } finally {
+        relaxed.closeIterator();
       }
     });
 
