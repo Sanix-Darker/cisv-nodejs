@@ -21,7 +21,6 @@
       "cflags_cc!": [ "-fno-exceptions" ],
       "cflags_cc": ["-O3"],
       "defines": [
-        "NAPI_DISABLE_CPP_EXCEPTIONS",
         "NAPI_VERSION=6"
       ],
       "conditions": [

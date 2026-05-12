@@ -103,8 +103,6 @@ declare module 'cisv' {
     | 'int'
     | 'to_float'
     | 'float'
-    | 'hash_sha256'
-    | 'sha256'
     | 'base64_encode'
     | 'base64';
 
@@ -333,7 +331,6 @@ declare module 'cisv' {
     readonly TRIM: 'trim';
     readonly TO_INT: 'to_int';
     readonly TO_FLOAT: 'to_float';
-    readonly HASH_SHA256: 'hash_sha256';
     readonly BASE64_ENCODE: 'base64_encode';
   };
 

@@ -8,7 +8,6 @@ declare module 'cisv' {
     TRIM = 'trim',
     TO_INT = 'to_int',
     TO_FLOAT = 'to_float',
-    HASH_SHA256 = 'hash_sha256',
     BASE64_ENCODE = 'base64_encode',
     CUSTOM = 'custom'
   }

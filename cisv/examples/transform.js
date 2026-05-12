@@ -35,24 +35,16 @@ const rows2 = parser2.parseSync(testFile);
 console.log('Original: "  jane smith  "');
 console.log('Trimmed with C:', `"${rows2[2][1]}"`);
 
-// Example 3: SHA256 hashing (C implementation)
-console.log('\n3. Native SHA256:');
-const parser3 = new cisvParser();
-parser3.transform(2, 'hash_sha256');
-
-const rows3 = parser3.parseSync(testFile);
-console.log('Hashed email (C implementation):', rows3[1][2]);
-
-// Example 4: Base64 encoding (C implementation)
-console.log('\n4. Native Base64:');
+// Example 3: Base64 encoding (C implementation)
+console.log('\n3. Native Base64:');
 const parser4 = new cisvParser();
 parser4.transform(1, 'base64_encode');
 
 const rows4 = parser4.parseSync(testFile);
 console.log('Base64 encoded names (C):', rows4.slice(1).map(row => row[1]));
 
-// Example 5: Multiple transforms on different fields
-console.log('\n5. Multiple native transforms:');
+// Example 4: Multiple transforms on different fields
+console.log('\n4. Multiple native transforms:');
 const parser5 = new cisvParser();
 parser5.transform(0, 'to_int')        // ID to int
        .transform(1, 'trim')           // Trim name
@@ -63,8 +55,8 @@ parser5.transform(0, 'to_int')        // ID to int
 const rows5 = parser5.parseSync(testFile);
 console.log('Multiple transforms:', rows5[1]);
 
-// Example 6: Performance test with native transforms
-console.log('\n6. Performance test (native C transforms):');
+// Example 5: Performance test with native transforms
+console.log('\n5. Performance test (native C transforms):');
 
 // Generate larger test file
 const largeCsv = 'large_native_test.csv';
@@ -97,8 +89,8 @@ console.timeEnd('With C transforms');
 const stats = parserWithTransform.getStats();
 console.log('Parse stats:', stats);
 
-// Example 7: Parse string content
-console.log('\n7. Parse string with transforms:');
+// Example 6: Parse string content
+console.log('\n6. Parse string with transforms:');
 const csvString = `name,value
 test one,123
 TEST TWO,456`;
@@ -113,8 +105,8 @@ const parser7_5 = new cisvParser();
 const rows7 = parser7.parseString(csvString);
 console.log('Parsed string:', rows7);
 
-// Example 8: Streaming with transforms
-console.log('\n8. Streaming with transforms:');
+// Example 7: Streaming with transforms
+console.log('\n7. Streaming with transforms:');
 const parser8 = new cisvParser();
 parser8.transform(0, 'uppercase');
 
@@ -126,13 +118,13 @@ parser8.end();
 const rows8 = parser8.getRows();
 console.log('Streamed rows:', rows8);
 
-// Example 9: Count rows (static method)
-console.log('\n9. Count rows:');
+// Example 8: Count rows (static method)
+console.log('\n8. Count rows:');
 const rowCount2 = cisvParser.countRows(testFile);
 console.log(`File has ${rowCount2} rows`);
 
-// Example 10: Clear and reuse parser
-console.log('\n10. Reuse parser:');
+// Example 9: Clear and reuse parser
+console.log('\n9. Reuse parser:');
 const parser10 = new cisvParser();
 parser10.transform(0, 'uppercase');
 

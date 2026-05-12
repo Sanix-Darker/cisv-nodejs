@@ -1,4 +1,4 @@
-const { cisvParser } = require('../build/Release/cisv');
+const { cisvParser, TransformType } = require('../build/Release/cisv');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -296,6 +296,14 @@ describe('CSV Parser Core Functionality', () => {
       const info = parser.getTransformInfo();
       assert.strictEqual(info.cTransformCount, 2);
       assert.strictEqual(info.jsTransformCount, 1);
+    });
+
+    it('should reject unsupported crypto transform names', () => {
+      const parser = new cisvParser();
+
+      assert.throws(() => parser.transform(0, 'hash_sha256'), /Unknown transform type/);
+      assert.throws(() => parser.transform(0, 'sha256'), /Unknown transform type/);
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(TransformType, 'HASH_SHA256'), false);
     });
   });
 

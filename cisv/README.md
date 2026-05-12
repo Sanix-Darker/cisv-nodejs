@@ -83,7 +83,6 @@ Built-in transform names:
 - `trim`
 - `to_int` (or `int`)
 - `to_float` (or `float`)
-- `hash_sha256` (or `sha256`)
 - `base64_encode` (or `base64`)
 
 ## Examples

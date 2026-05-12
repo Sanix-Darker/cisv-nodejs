@@ -1074,8 +1074,6 @@ public:
                 type = TRANSFORM_TO_INT;
             } else if (transform_type == "to_float" || transform_type == "float") {
                 type = TRANSFORM_TO_FLOAT;
-            } else if (transform_type == "hash_sha256" || transform_type == "sha256") {
-                type = TRANSFORM_HASH_SHA256;
             } else if (transform_type == "base64_encode" || transform_type == "base64") {
                 type = TRANSFORM_BASE64_ENCODE;
             } else {
@@ -1185,8 +1183,6 @@ Napi::Value TransformByName(const Napi::CallbackInfo &info) {
             type = TRANSFORM_TO_INT;
         } else if (transform_type == "to_float" || transform_type == "float") {
             type = TRANSFORM_TO_FLOAT;
-        } else if (transform_type == "hash_sha256" || transform_type == "sha256") {
-            type = TRANSFORM_HASH_SHA256;
         } else if (transform_type == "base64_encode" || transform_type == "base64") {
             type = TRANSFORM_BASE64_ENCODE;
         } else {
@@ -1845,7 +1841,6 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
     transformTypes.Set("TRIM", Napi::String::New(env, "trim"));
     transformTypes.Set("TO_INT", Napi::String::New(env, "to_int"));
     transformTypes.Set("TO_FLOAT", Napi::String::New(env, "to_float"));
-    transformTypes.Set("HASH_SHA256", Napi::String::New(env, "hash_sha256"));
     transformTypes.Set("BASE64_ENCODE", Napi::String::New(env, "base64_encode"));
     exports.Set("TransformType", transformTypes);
 
