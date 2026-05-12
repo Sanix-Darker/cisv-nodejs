@@ -267,7 +267,7 @@ static napi_value SafeNewStringValue(napi_env env, const char* data, size_t len)
             if (napi_create_string_latin1(env, data, len, &short_value) == napi_ok && short_value) {
                 return short_value;
             }
-        } else {
+        } else if (isValidUtf8(data, len)) {
             if (napi_create_string_utf8(env, data, len, &short_value) == napi_ok && short_value) {
                 return short_value;
             }
@@ -900,16 +900,28 @@ public:
             throw Napi::Error::New(env, "Parser has been destroyed");
         }
 
-        if (info.Length() != 1 || !info[0].IsString()) {
-            throw Napi::TypeError::New(env, "Expected CSV string");
+        if (info.Length() != 1 || (!info[0].IsString() && !info[0].IsBuffer())) {
+            throw Napi::TypeError::New(env, "Expected CSV string or Buffer");
         }
 
-        std::string content = info[0].As<Napi::String>();
+        const char *content_data = nullptr;
+        size_t content_len = 0;
+        std::string content_storage;
+
+        if (info[0].IsBuffer()) {
+            auto buffer = info[0].As<Napi::Buffer<char>>();
+            content_data = buffer.Data();
+            content_len = buffer.Length();
+        } else {
+            content_storage = info[0].As<Napi::String>();
+            content_data = content_storage.data();
+            content_len = content_storage.size();
+        }
 
         resetRowState();
 
         if (!hasTransforms()) {
-            cisv_result_t *batch = cisv_parse_string_batch(content.c_str(), content.length(), &config_);
+            cisv_result_t *batch = cisv_parse_string_batch(content_data, content_len, &config_);
             if (!batch) {
                 throw Napi::Error::New(env, "parse error: " + std::string(strerror(errno)));
             }
@@ -926,14 +938,14 @@ public:
             ensureParser(env);
 
             // Write the string content as chunks
-            cisv_parser_write(parser_, (const uint8_t*)content.c_str(), content.length());
+            cisv_parser_write(parser_, reinterpret_cast<const uint8_t*>(content_data), content_len);
             cisv_parser_end(parser_);
 
             // Clear the environment reference after parsing
             rc_->env = nullptr;
         }
 
-        total_bytes_ = content.length();
+        total_bytes_ = content_len;
 
         return drainRows(env);
     }

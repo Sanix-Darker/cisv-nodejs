@@ -161,11 +161,11 @@ declare module 'cisv' {
     parseParallel(path: string, numThreads?: number): Promise<ParsedRow[]>;
 
     /**
-     * Parse CSV string content
-     * @param csv - CSV string content
+     * Parse CSV string or Buffer content
+     * @param csv - CSV content as string or Buffer
      * @returns Array of parsed rows
      */
-    parseString(csv: string): ParsedRow[];
+    parseString(csv: string | Buffer): ParsedRow[];
 
     /**
      * Write chunk of data for streaming parsing

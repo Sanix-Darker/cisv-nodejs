@@ -87,11 +87,11 @@ declare module 'cisv' {
     parseParallel(path: string, numThreads?: number): Promise<string[][]>;
 
     /**
-     * Parse CSV string content
-     * @param content CSV string content
+     * Parse CSV string or Buffer content
+     * @param content CSV content as string or Buffer
      * @returns Array of rows with string values
      */
-    parseString(content: string): string[][];
+    parseString(content: Buffer | string): string[][];
 
     /**
      * Write chunk of CSV data (for streaming)

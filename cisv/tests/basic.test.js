@@ -252,6 +252,24 @@ describe('CSV Parser Core Functionality', () => {
       assert.strictEqual(rows[2][1], 'Contains "quotes" and, commas');
       // Note: Multi-line within quotes may need special handling
     });
+
+    it('should parse Buffer input without truncating embedded NUL bytes', () => {
+      const parser = new cisvParser();
+      const rows = parser.parseString(Buffer.from('a,b\nx\0y,z\n', 'latin1'));
+
+      assert.strictEqual(rows.length, 2);
+      assert.strictEqual(rows[1][0].length, 3);
+      assert.strictEqual(rows[1][0].charCodeAt(1), 0);
+      assert.deepStrictEqual(rows[1], ['x\0y', 'z']);
+    });
+
+    it('should replace invalid UTF-8 bytes from Buffer input without throwing', () => {
+      const parser = new cisvParser();
+      const rows = parser.parseString(Buffer.from([0x61, 0x2c, 0x62, 0x0a, 0x31, 0x2c, 0xff, 0x0a]));
+
+      assert.deepStrictEqual(rows[0], ['a', 'b']);
+      assert.strictEqual(rows[1][1], '\uFFFD');
+    });
   });
 
   describe('Streaming API', () => {
