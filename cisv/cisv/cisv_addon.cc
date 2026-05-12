@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <chrono>
 #include <cstdint>
+#include <climits>
 
 namespace {
 
@@ -1586,24 +1587,83 @@ Napi::Value RemoveTransformByName(const Napi::CallbackInfo &info) {
         cisv_config_init(&config);
 
         // Apply configuration if provided
+        if (info.Length() > 1 && !info[1].IsNull() && !info[1].IsUndefined() && !info[1].IsObject()) {
+            throw Napi::TypeError::New(env, "Config must be an object");
+        }
+
         if (info.Length() > 1 && info[1].IsObject()) {
             Napi::Object options = info[1].As<Napi::Object>();
 
             // Apply same configuration parsing logic
             ValidateSingleCharOption(env, options, "delimiter", &config.delimiter);
             ValidateSingleCharOption(env, options, "quote", &config.quote);
+            ValidateSingleCharOption(env, options, "escape", &config.escape, true);
             ValidateSingleCharOption(env, options, "comment", &config.comment, true);
 
             if (options.Has("skipEmptyLines")) {
+                if (!options.Get("skipEmptyLines").IsBoolean()) {
+                    throw Napi::TypeError::New(env, "skipEmptyLines must be a boolean");
+                }
                 config.skip_empty_lines = options.Get("skipEmptyLines").As<Napi::Boolean>();
             }
 
+            if (options.Has("trim")) {
+                if (!options.Get("trim").IsBoolean()) {
+                    throw Napi::TypeError::New(env, "trim must be a boolean");
+                }
+                config.trim = options.Get("trim").As<Napi::Boolean>();
+            }
+
+            if (options.Has("relaxed")) {
+                if (!options.Get("relaxed").IsBoolean()) {
+                    throw Napi::TypeError::New(env, "relaxed must be a boolean");
+                }
+                config.relaxed = options.Get("relaxed").As<Napi::Boolean>();
+            }
+
+            if (options.Has("skipLinesWithError")) {
+                if (!options.Get("skipLinesWithError").IsBoolean()) {
+                    throw Napi::TypeError::New(env, "skipLinesWithError must be a boolean");
+                }
+                config.skip_lines_with_error = options.Get("skipLinesWithError").As<Napi::Boolean>();
+            }
+
+            if (options.Has("maxRowSize")) {
+                Napi::Value val = options.Get("maxRowSize");
+                if (!val.IsNull() && !val.IsUndefined()) {
+                    if (!val.IsNumber()) {
+                        throw Napi::TypeError::New(env, "maxRowSize must be a number");
+                    }
+                    double raw = val.As<Napi::Number>().DoubleValue();
+                    if (!(raw >= 0.0) || raw > static_cast<double>(SIZE_MAX)) {
+                        throw Napi::RangeError::New(env, "maxRowSize is out of range");
+                    }
+                    config.max_row_size = static_cast<size_t>(raw);
+                }
+            }
+
             if (options.Has("fromLine")) {
-                config.from_line = options.Get("fromLine").As<Napi::Number>().Int32Value();
+                Napi::Value val = options.Get("fromLine");
+                if (!val.IsNumber()) {
+                    throw Napi::TypeError::New(env, "fromLine must be a number");
+                }
+                double raw = val.As<Napi::Number>().DoubleValue();
+                if (!(raw >= 0.0) || raw > static_cast<double>(INT_MAX)) {
+                    throw Napi::RangeError::New(env, "fromLine is out of range");
+                }
+                config.from_line = static_cast<int>(raw);
             }
 
             if (options.Has("toLine")) {
-                config.to_line = options.Get("toLine").As<Napi::Number>().Int32Value();
+                Napi::Value val = options.Get("toLine");
+                if (!val.IsNumber()) {
+                    throw Napi::TypeError::New(env, "toLine must be a number");
+                }
+                double raw = val.As<Napi::Number>().DoubleValue();
+                if (!(raw >= 0.0) || raw > static_cast<double>(INT_MAX)) {
+                    throw Napi::RangeError::New(env, "toLine is out of range");
+                }
+                config.to_line = static_cast<int>(raw);
             }
         }
 

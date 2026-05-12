@@ -9,6 +9,8 @@ describe('CSV Parser Core Functionality', () => {
   const largeFile = path.join(testDir, 'large.csv');
   const tsvFile = path.join(testDir, 'test.tsv');
   const quotedFile = path.join(testDir, 'quoted.csv');
+  const countControlFile = path.join(testDir, 'count-controls.csv');
+  const escapedCountFile = path.join(testDir, 'count-escaped.csv');
 
   before(() => {
     if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
@@ -28,6 +30,17 @@ describe('CSV Parser Core Functionality', () => {
       '"Product B","Contains ""quotes"" and, commas",20.50\n' +
       '"Product C","Multi\nline\ndescription",15.00');
 
+    fs.writeFileSync(countControlFile,
+      '  #skip\n' +
+      '\n' +
+      'h1,h2\n' +
+      ',,\n' +
+      '"#keep",x\n');
+
+    fs.writeFileSync(escapedCountFile,
+      'id,payload\n' +
+      '1,"line1\\\nline2 with \\"quote\\""\n');
+
     // Generate large test file (1000 rows)
     let largeContent = 'id,value\n';
     for (let i = 0; i < 1000; i++) {
@@ -37,7 +50,7 @@ describe('CSV Parser Core Functionality', () => {
   });
 
   after(() => {
-    [testFile, largeFile, tsvFile, quotedFile].forEach(file => {
+    [testFile, largeFile, tsvFile, quotedFile, countControlFile, escapedCountFile].forEach(file => {
       if (fs.existsSync(file)) fs.unlinkSync(file);
     });
     if (fs.existsSync(testDir)) fs.rmdirSync(testDir);
@@ -316,6 +329,45 @@ describe('CSV Parser Core Functionality', () => {
     it('should count rows with configuration', () => {
       const count = cisvParser.countRowsWithConfig(tsvFile, { delimiter: '\t' });
       assert.strictEqual(count, 3);
+    });
+
+    it('should count rows with semantic controls', () => {
+      const count = cisvParser.countRowsWithConfig(countControlFile, {
+        comment: '#',
+        skipEmptyLines: true,
+        trim: true
+      });
+      assert.strictEqual(count, 3);
+    });
+
+    it('should count rows with line ranges', () => {
+      const count = cisvParser.countRowsWithConfig(largeFile, {
+        fromLine: 2,
+        toLine: 11
+      });
+      assert.strictEqual(count, 10);
+    });
+
+    it('should count rows with custom escape', () => {
+      const count = cisvParser.countRowsWithConfig(escapedCountFile, {
+        escape: '\\'
+      });
+      assert.strictEqual(count, 2);
+    });
+
+    it('should validate count config options', () => {
+      assert.throws(
+        () => cisvParser.countRowsWithConfig(testFile, { escape: 'xx' }),
+        /escape must be exactly 1 character/
+      );
+      assert.throws(
+        () => cisvParser.countRowsWithConfig(testFile, { fromLine: -1 }),
+        /fromLine is out of range/
+      );
+      assert.throws(
+        () => cisvParser.countRowsWithConfig(testFile, { skipEmptyLines: 'yes' }),
+        /skipEmptyLines must be a boolean/
+      );
     });
   });
 
