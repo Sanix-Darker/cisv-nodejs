@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <climits>
@@ -1433,18 +1434,28 @@ Napi::Value RemoveTransformByName(const Napi::CallbackInfo &info) {
 
     std::string field_name = info[0].As<Napi::String>();
 
+    int field_index = -1;
+
     // Remove from JavaScript transforms by finding the field index
     if (rc_->pipeline && rc_->pipeline->header_fields) {
         for (size_t i = 0; i < rc_->pipeline->header_count; i++) {
             if (strcmp(rc_->pipeline->header_fields[i], field_name.c_str()) == 0) {
-                rc_->js_transforms.erase(i);
+                field_index = static_cast<int>(i);
+                auto it = rc_->js_transforms.find(field_index);
+                if (it != rc_->js_transforms.end()) {
+                    if (!it->second.IsEmpty()) {
+                        it->second.Reset();
+                    }
+                    rc_->js_transforms.erase(it);
+                }
                 break;
             }
         }
     }
 
-    // TODO: Implement removal of C transforms by name in cisv_transformer.c
-    // For now, this only removes JS transforms
+    if (field_index >= 0 && rc_->pipeline) {
+        cisv_transform_pipeline_remove_field(rc_->pipeline, field_index);
+    }
 
     return info.This();
 }
@@ -1463,10 +1474,17 @@ Napi::Value RemoveTransformByName(const Napi::CallbackInfo &info) {
         int field_index = info[0].As<Napi::Number>().Int32Value();
 
         // Remove from JavaScript transforms
-        rc_->js_transforms.erase(field_index);
+        auto it = rc_->js_transforms.find(field_index);
+        if (it != rc_->js_transforms.end()) {
+            if (!it->second.IsEmpty()) {
+                it->second.Reset();
+            }
+            rc_->js_transforms.erase(it);
+        }
 
-        // TODO: Implement removal of C transforms in cisv_transformer.c
-        // For now, this only removes JS transforms
+        if (rc_->pipeline) {
+            cisv_transform_pipeline_remove_field(rc_->pipeline, field_index);
+        }
 
         return info.This();
     }
@@ -1593,14 +1611,27 @@ Napi::Value RemoveTransformByName(const Napi::CallbackInfo &info) {
         result.Set("jsTransformCount", Napi::Number::New(env, js_transform_count));
 
         // List field indices with transforms
-        Napi::Array fields = Napi::Array::New(env);
-        size_t idx = 0;
+        std::vector<int> field_indices;
+        auto add_field_index = [&field_indices](int field_index) {
+            if (std::find(field_indices.begin(), field_indices.end(), field_index) == field_indices.end()) {
+                field_indices.push_back(field_index);
+            }
+        };
 
-        // Add JS transform field indices
+        if (rc_ && rc_->pipeline) {
+            for (size_t i = 0; i < rc_->pipeline->count; i++) {
+                add_field_index(rc_->pipeline->transforms[i].field_index);
+            }
+        }
         if (rc_) {
             for (const auto& pair : rc_->js_transforms) {
-                fields[idx++] = Napi::Number::New(env, pair.first);
+                add_field_index(pair.first);
             }
+        }
+
+        Napi::Array fields = Napi::Array::New(env, field_indices.size());
+        for (size_t i = 0; i < field_indices.size(); i++) {
+            fields[i] = Napi::Number::New(env, field_indices[i]);
         }
 
         result.Set("fieldIndices", fields);

@@ -314,17 +314,62 @@ describe('CSV Parser Core Functionality', () => {
       assert.deepStrictEqual(rows[1], ['1', '2', '3']);
     });
 
-    // it('should clear transforms', () => {
-    //   const parser = new cisvParser();
-    //   parser.transform(1, 'uppercase');
+    it('should clear native transforms', () => {
+      const parser = new cisvParser();
+      parser.transform(0, 'uppercase');
 
-    //   let rows = parser.parseString('name\njohn');
-    //   assert.strictEqual(rows[1][0], 'JOHN');
+      let rows = parser.parseString('name\njohn');
+      assert.strictEqual(rows[1][0], 'JOHN');
 
-    //   parser.clearTransforms();
-    //   rows = parser.parseString('name\njane');
-    //   assert.strictEqual(rows[1][0], 'jane'); // No transform applied
-    // });
+      parser.clearTransforms();
+      rows = parser.parseString('name\njane');
+      assert.strictEqual(rows[1][0], 'jane');
+      assert.strictEqual(parser.getTransformInfo().cTransformCount, 0);
+    });
+
+    it('should remove native transforms by field index', () => {
+      const parser = new cisvParser();
+      parser.transform(0, 'uppercase').transform(1, 'lowercase');
+
+      parser.removeTransform(0);
+      const rows = parser.parseString('Name,Email\nJohn,JOHN@TEST.COM');
+
+      assert.strictEqual(rows[1][0], 'John');
+      assert.strictEqual(rows[1][1], 'john@test.com');
+
+      const info = parser.getTransformInfo();
+      assert.strictEqual(info.cTransformCount, 1);
+      assert.deepStrictEqual(info.fieldIndices, [1]);
+    });
+
+    it('should remove JavaScript transforms by field index and reset references', () => {
+      const parser = new cisvParser();
+      parser.transform(0, value => value.toUpperCase());
+      parser.removeTransform(0);
+
+      const rows = parser.parseString('name\njohn');
+      assert.strictEqual(rows[1][0], 'john');
+      assert.strictEqual(parser.getTransformInfo().jsTransformCount, 0);
+    });
+
+    it('should remove native and JavaScript transforms by field name', () => {
+      const parser = new cisvParser();
+      parser.setHeaderFields(['id', 'name']);
+      parser
+        .transformByName('id', value => `#${value}`)
+        .transformByName('name', 'uppercase');
+
+      parser.removeTransformByName('id');
+      parser.removeTransformByName('name');
+
+      const rows = parser.parseString('id,name\n1,john');
+      assert.deepStrictEqual(rows[1], ['1', 'john']);
+
+      const info = parser.getTransformInfo();
+      assert.strictEqual(info.cTransformCount, 0);
+      assert.strictEqual(info.jsTransformCount, 0);
+      assert.deepStrictEqual(info.fieldIndices, []);
+    });
 
     it('should get transform info', () => {
       const parser = new cisvParser();
@@ -335,6 +380,7 @@ describe('CSV Parser Core Functionality', () => {
       const info = parser.getTransformInfo();
       assert.strictEqual(info.cTransformCount, 2);
       assert.strictEqual(info.jsTransformCount, 1);
+      assert.deepStrictEqual(info.fieldIndices.sort((a, b) => a - b), [0, 1, 2]);
     });
 
     it('should reject unsupported crypto transform names', () => {
