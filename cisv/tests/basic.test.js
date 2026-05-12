@@ -3,6 +3,15 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
+function fetchAllRows(parser) {
+  const rows = [];
+  let row;
+  while ((row = parser.fetchRow()) !== null) {
+    rows.push(row);
+  }
+  return rows;
+}
+
 describe('CSV Parser Core Functionality', () => {
   const testDir = path.join(__dirname, 'fixtures');
   const testFile = path.join(testDir, 'test.csv');
@@ -11,6 +20,9 @@ describe('CSV Parser Core Functionality', () => {
   const quotedFile = path.join(testDir, 'quoted.csv');
   const countControlFile = path.join(testDir, 'count-controls.csv');
   const escapedCountFile = path.join(testDir, 'count-escaped.csv');
+  const iteratorConfigFile = path.join(testDir, 'iterator-config.csv');
+  const iteratorEmptyFile = path.join(testDir, 'iterator-empty.csv');
+  const iteratorLimitFile = path.join(testDir, 'iterator-limit.csv');
 
   before(() => {
     if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
@@ -41,6 +53,21 @@ describe('CSV Parser Core Functionality', () => {
       'id,payload\n' +
       '1,"line1\\\nline2 with \\"quote\\""\n');
 
+    fs.writeFileSync(iteratorConfigFile,
+      '  #skip\n' +
+      'id,msg\n' +
+      '1,"hello \\"quoted\\""\n' +
+      '2,tail\n');
+
+    fs.writeFileSync(iteratorEmptyFile,
+      '\n' +
+      '""\n' +
+      '#skip\n' +
+      '"#keep"\n' +
+      ',,\n');
+
+    fs.writeFileSync(iteratorLimitFile, 'a,b\n123456789,2\n');
+
     // Generate large test file (1000 rows)
     let largeContent = 'id,value\n';
     for (let i = 0; i < 1000; i++) {
@@ -50,7 +77,17 @@ describe('CSV Parser Core Functionality', () => {
   });
 
   after(() => {
-    [testFile, largeFile, tsvFile, quotedFile, countControlFile, escapedCountFile].forEach(file => {
+    [
+      testFile,
+      largeFile,
+      tsvFile,
+      quotedFile,
+      countControlFile,
+      escapedCountFile,
+      iteratorConfigFile,
+      iteratorEmptyFile,
+      iteratorLimitFile
+    ].forEach(file => {
       if (fs.existsSync(file)) fs.unlinkSync(file);
     });
     if (fs.existsSync(testDir)) fs.rmdirSync(testDir);
@@ -457,6 +494,66 @@ describe('CSV Parser Core Functionality', () => {
         () => cisvParser.countRowsWithConfig(testFile, { fromLine: 3, toLine: 2 }),
         /toLine must be >= fromLine/
       );
+    });
+  });
+
+  describe('Iterator API', () => {
+    it('should use parser config for escape, comments, trimming, and line controls', () => {
+      const parser = new cisvParser({
+        escape: '\\',
+        comment: '#',
+        trim: true,
+        fromLine: 1,
+        toLine: 3
+      });
+
+      parser.openIterator(iteratorConfigFile);
+      const rows = fetchAllRows(parser);
+      parser.closeIterator();
+
+      assert.deepStrictEqual(rows, [
+        ['id', 'msg'],
+        ['1', 'hello "quoted"']
+      ]);
+    });
+
+    it('should preserve quoted empty and quoted comment rows with skipEmptyLines', () => {
+      const parser = new cisvParser({
+        comment: '#',
+        skipEmptyLines: true
+      });
+
+      parser.openIterator(iteratorEmptyFile);
+      const rows = fetchAllRows(parser);
+      parser.closeIterator();
+
+      assert.deepStrictEqual(rows, [
+        [''],
+        ['#keep'],
+        ['', '', '']
+      ]);
+    });
+
+    it('should enforce maxRowSize during iteration', () => {
+      const parser = new cisvParser({ maxRowSize: 8 });
+      parser.openIterator(iteratorLimitFile);
+
+      try {
+        assert.throws(() => fetchAllRows(parser), /Error reading CSV row/);
+      } finally {
+        parser.closeIterator();
+      }
+    });
+
+    it('should repeatedly open, fetch, and close without changing results', () => {
+      const parser = new cisvParser({ skipEmptyLines: true });
+
+      for (let i = 0; i < 50; i++) {
+        parser.openIterator(iteratorEmptyFile);
+        const rows = fetchAllRows(parser);
+        parser.closeIterator();
+        assert.strictEqual(rows.length, 4);
+      }
     });
   });
 
