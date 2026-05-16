@@ -106,15 +106,16 @@ function analyzeSingleSimpleChunk(chunk, delimiter, quote) {
   let cols = -1;
   let currentCols = 1;
   let hasData = false;
+  let rows = 0;
 
   if (Buffer.isBuffer(chunk)) {
     if (chunk.length >= 3 && chunk[0] === 0xEF && chunk[1] === 0xBB && chunk[2] === 0xBF) {
-      return { simple: false, uniform: false };
+      return { simple: false, uniform: false, rows: 0, cols: 0 };
     }
     for (let i = 0; i < chunk.length; i++) {
       const code = chunk[i];
       if (code === quoteCode || code === 13 || code > 127) {
-        return { simple: false, uniform: false };
+        return { simple: false, uniform: false, rows: 0, cols: 0 };
       }
       if (code === delimiterCode) {
         currentCols++;
@@ -123,8 +124,9 @@ function analyzeSingleSimpleChunk(chunk, delimiter, quote) {
         if (cols === -1) {
           cols = currentCols;
         } else if (currentCols !== cols) {
-          return { simple: true, uniform: false };
+          return { simple: true, uniform: false, rows: 0, cols: 0 };
         }
+        rows++;
         currentCols = 1;
         hasData = false;
       } else {
@@ -136,12 +138,12 @@ function analyzeSingleSimpleChunk(chunk, delimiter, quote) {
         chunk.charCodeAt(0) === 0xEF &&
         chunk.charCodeAt(1) === 0xBB &&
         chunk.charCodeAt(2) === 0xBF) {
-      return { simple: false, uniform: false };
+      return { simple: false, uniform: false, rows: 0, cols: 0 };
     }
     for (let i = 0; i < chunk.length; i++) {
       const code = chunk.charCodeAt(i);
       if (code === quoteCode || code === 13 || code > 127) {
-        return { simple: false, uniform: false };
+        return { simple: false, uniform: false, rows: 0, cols: 0 };
       }
       if (code === delimiterCode) {
         currentCols++;
@@ -150,8 +152,9 @@ function analyzeSingleSimpleChunk(chunk, delimiter, quote) {
         if (cols === -1) {
           cols = currentCols;
         } else if (currentCols !== cols) {
-          return { simple: true, uniform: false };
+          return { simple: true, uniform: false, rows: 0, cols: 0 };
         }
+        rows++;
         currentCols = 1;
         hasData = false;
       } else {
@@ -161,10 +164,16 @@ function analyzeSingleSimpleChunk(chunk, delimiter, quote) {
   }
 
   if (hasData && cols !== -1 && currentCols !== cols) {
-    return { simple: true, uniform: false };
+    return { simple: true, uniform: false, rows: 0, cols: 0 };
+  }
+  if (hasData) {
+    rows++;
+    if (cols === -1) {
+      cols = currentCols;
+    }
   }
 
-  return { simple: true, uniform: true };
+  return { simple: true, uniform: true, rows, cols: Math.max(cols, 0) };
 }
 
 function parseSimpleRows(data, delimiter) {
@@ -186,7 +195,7 @@ function parseSimpleRows(data, delimiter) {
   return rows;
 }
 
-function parseUniformRows(data, delimiter) {
+function parseUniformRows(data, delimiter, rowCount, cols) {
   let end = data.length;
   if (end === 0) {
     return [];
@@ -198,14 +207,18 @@ function parseUniformRows(data, delimiter) {
     return [['']];
   }
 
-  let cols = 1;
-  for (let i = 0; i < end && data.charCodeAt(i) !== 10; i++) {
-    if (data[i] === delimiter) {
-      cols++;
+  const usePrealloc = rowCount > 0 && cols > 0;
+  if (!usePrealloc) {
+    cols = 1;
+    for (let i = 0; i < end && data.charCodeAt(i) !== 10; i++) {
+      if (data[i] === delimiter) {
+        cols++;
+      }
     }
   }
 
-  const rows = [];
+  const rows = usePrealloc ? new Array(rowCount) : [];
+  let rowIdx = 0;
   let pos = 0;
   while (pos < end) {
     const row = new Array(cols);
@@ -220,7 +233,11 @@ function parseUniformRows(data, delimiter) {
       lineEnd = end;
     }
     row[cols - 1] = data.slice(pos, lineEnd);
-    rows.push(row);
+    if (usePrealloc) {
+      rows[rowIdx++] = row;
+    } else {
+      rows.push(row);
+    }
     pos = lineEnd + 1;
   }
 
@@ -279,14 +296,21 @@ function wrapAddon(addon) {
             this._cisvFastConfig.quote);
           simple = analysis.simple;
           uniform = analysis.uniform;
+          var rowCount = analysis.rows;
+          var colCount = analysis.cols;
         } else {
           simple = chunksAreSimpleAsciiLf(this._cisvFastChunks, this._cisvFastConfig.quote);
         }
 
         if (simple) {
           const data = chunksToLatin1String(this._cisvFastChunks);
+          const useLargePrealloc = data.length >= 64 * 1024 * 1024;
           this._cisvFastRows = uniform
-            ? parseUniformRows(data, this._cisvFastConfig.delimiter)
+            ? parseUniformRows(
+                data,
+                this._cisvFastConfig.delimiter,
+                useLargePrealloc ? rowCount : 0,
+                useLargePrealloc ? colCount : 0)
             : parseSimpleRows(data, this._cisvFastConfig.delimiter);
           this._cisvFastChunks = [];
           return;
