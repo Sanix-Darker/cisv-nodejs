@@ -18,6 +18,9 @@ function fastConfigFromOptions(options) {
   if (typeof quote !== 'string' || quote.length !== 1) {
     return null;
   }
+  if (delimiter === '\n' || delimiter === '\r' || quote === '\n' || quote === '\r') {
+    return null;
+  }
 
   if (options.escape != null && options.escape !== '') {
     return null;
@@ -196,31 +199,33 @@ function parseSimpleRows(data, delimiter) {
 }
 
 function parseUniformRows(data, delimiter, rowCount, cols) {
-  let end = data.length;
-  if (end === 0) {
+  const length = data.length;
+  if (length === 0) {
     return [];
   }
-  if (data.charCodeAt(end - 1) === 10) {
-    end--;
+
+  let bodyEnd = length;
+  if (data.charCodeAt(bodyEnd - 1) === 10) {
+    bodyEnd--;
   }
-  if (end === 0) {
+  if (bodyEnd === 0) {
     return [['']];
   }
 
+  const hasTrailingEmptyRow = data.charCodeAt(bodyEnd - 1) === 10;
   const usePrealloc = rowCount > 0 && cols > 0;
   if (!usePrealloc) {
     cols = 1;
-    for (let i = 0; i < end && data.charCodeAt(i) !== 10; i++) {
+    for (let i = 0; i < bodyEnd && data.charCodeAt(i) !== 10; i++) {
       if (data[i] === delimiter) {
         cols++;
       }
     }
   }
-
   const rows = usePrealloc ? new Array(rowCount) : [];
   let rowIdx = 0;
   let pos = 0;
-  while (pos < end) {
+  while (pos < bodyEnd) {
     const row = new Array(cols);
     for (let col = 0; col < cols - 1; col++) {
       const next = data.indexOf(delimiter, pos);
@@ -229,8 +234,8 @@ function parseUniformRows(data, delimiter, rowCount, cols) {
     }
 
     let lineEnd = data.indexOf('\n', pos);
-    if (lineEnd === -1 || lineEnd > end) {
-      lineEnd = end;
+    if (lineEnd === -1 || lineEnd > bodyEnd) {
+      lineEnd = bodyEnd;
     }
     row[cols - 1] = data.slice(pos, lineEnd);
     if (usePrealloc) {
@@ -239,6 +244,18 @@ function parseUniformRows(data, delimiter, rowCount, cols) {
       rows.push(row);
     }
     pos = lineEnd + 1;
+  }
+
+  if (hasTrailingEmptyRow) {
+    const row = new Array(cols);
+    for (let col = 0; col < cols; col++) {
+      row[col] = '';
+    }
+    if (usePrealloc) {
+      rows[rowIdx] = row;
+    } else {
+      rows.push(row);
+    }
   }
 
   return rows;
