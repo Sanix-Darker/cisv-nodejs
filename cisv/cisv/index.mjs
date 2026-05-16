@@ -7,6 +7,10 @@ const require = createRequire(import.meta.url);
 
 const gyp = require('node-gyp-build');
 const addon = gyp(path.join(__dirname, '..'));
+const { wrapAddon } = require('./wrapper.js');
+const wrapped = wrapAddon(addon);
 
-export const cisvParser = addon.cisvParser;
-export default addon;
+export const cisvParser = wrapped.cisvParser;
+export const TransformType = wrapped.TransformType;
+export const version = wrapped.version;
+export default wrapped;
