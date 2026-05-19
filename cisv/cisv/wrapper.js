@@ -321,13 +321,12 @@ function wrapAddon(addon) {
 
         if (simple) {
           const data = chunksToLatin1String(this._cisvFastChunks);
-          const useLargePrealloc = data.length >= 64 * 1024 * 1024;
           this._cisvFastRows = uniform
             ? parseUniformRows(
                 data,
                 this._cisvFastConfig.delimiter,
-                useLargePrealloc ? rowCount : 0,
-                useLargePrealloc ? colCount : 0)
+                rowCount,
+                colCount)
             : parseSimpleRows(data, this._cisvFastConfig.delimiter);
           this._cisvFastChunks = [];
           return;
