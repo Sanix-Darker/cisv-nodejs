@@ -5,12 +5,19 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      publish_npm:
+        description: "Publish cisv to npm. Manual only."
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
   publish-npm:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_npm }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +78,6 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   release:
-    needs: publish-npm
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
