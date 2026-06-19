@@ -46,7 +46,7 @@
     "@types/node": "^25.0.6",
     "benchmark": "^2.1.4",
     "chai": "^6.2.0",
-    "csv-parse": "^6.0.0",
+    "csv-parse": "^7.0.0",
     "fast-csv": "^5.0.2",
     "mocha": "^11.7.4",
     "neat-csv": "^7.0.0",
